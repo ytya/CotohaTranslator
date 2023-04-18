@@ -17,6 +17,7 @@ const setShortcutKey = () => {
     globalShortcut.register('CommandOrControl+T', () => {
         // ウィンドウ表示
         mainWindow.show();
+        mainWindow.focus();
         // 選択した文字列を取得する
         const selectedText = clipboard.readText('selection');
         // ウィンドウのオブジェクトを取得する
@@ -66,18 +67,26 @@ const createWindow = () => {
     // タスクトレイのメニューを設定する
     const contextMenu = Menu.buildFromTemplate([
         { label: "Show", click: () => mainWindow.show() },
-        { label: "Quit", click: () => app.quit() },
+        { label: "Quit", click: () => {
+            app.quitting = true;
+            app.quit();
+        }},
     ]);
     tray.setToolTip("CotohaTranslator");
     tray.setContextMenu(contextMenu);
 
     // アプリを終了せずにタスクトレイに格納
     mainWindow.on('close', (e) => {
-        e.preventDefault();
-        mainWindow.hide();
+        if (app.quitting) {
+            mainWindow = null;
+        } else {
+            e.preventDefault();
+            mainWindow.hide();
+        }
     });
 }
 
+// 二重起動防止
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
