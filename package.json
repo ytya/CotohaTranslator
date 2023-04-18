@@ -1,0 +1,23 @@
+{
+  "name": "cotohatranslator",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "ytyadev",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^24.1.2",
+    "electron-builder": "^23.6.0"
+  },
+  "dependencies": {
+    "clipboard-event": "^1.6.0"
+  },
+  "build": {
+    "icon": "./assets/icon.ico"
+  }
+}
