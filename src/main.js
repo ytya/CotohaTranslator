@@ -1,12 +1,40 @@
-const { app, BrowserWindow, BrowserView, Menu, globalShortcut, clipboard, Tray } = require('electron');
+const { app, BrowserWindow, BrowserView, Menu, globalShortcut, clipboard, Tray, dialog } = require('electron');
 const clipboardListener = require('clipboard-event');
 const path = require('path');
-const url = require('url');
+const preferences = require('./preferences.js')
 
 let mainWindow;
 let view;
 let tray;
 let shortcutKeyRegisterd = false;
+let trySignin = false;
+
+const setElementValue = (selector, elemType, value) => {
+    // Recat用のvalue設定
+    const webContents = view.webContents;
+    return webContents.executeJavaScript(
+        `var elem = document.querySelector('${selector}');` +
+        `Object.getOwnPropertyDescriptor(window.${elemType}.prototype, 'value').set.call(elem, '${value}');` +
+        `input.dispatchEvent(new Event('change', {bubbles: true}));`);
+}
+
+const sleep = (time) => {
+    return new Promise(r => {
+        setTimeout(() => resolve(), time);
+    });
+}
+
+const translate = (text) => {
+    // テキストエリアにコピー
+    const webContents = view.webContents;
+    setElementValue('textarea[data-testid="originalText"]', 'HTMLTextAreaElement', text).then(r => {
+        // 翻訳ボタンが有効になるまでディレイ
+        return sleep(1500);
+    }).then(r => {
+        // button要素をクリックする
+        webContents.executeJavaScript('document.querySelector("button").click()');
+    });
+}
 
 const setShortcutKey = () => {
     // ショートカットキーを設定
@@ -18,16 +46,10 @@ const setShortcutKey = () => {
         // ウィンドウ表示
         mainWindow.show();
         mainWindow.focus();
-        // 選択した文字列を取得する
-        const selectedText = clipboard.readText('selection');
-        // ウィンドウのオブジェクトを取得する
-        const win = BrowserWindow.getFocusedWindow();
-        // テキストエリアにコピー
-        const webContents = view.webContents;
-        //webContents.executeJavaScript(`document.querySelector(".er8xn").value = "${selectedText}"`);
-        webContents.executeJavaScript(`document.querySelector("#queryinput").value = "${selectedText}"`);
-        // button要素をクリックする
-        webContents.executeJavaScript('document.querySelector(".lQueryHeader__input_container").querySelector("button").click()');
+
+        // クリップボードから文字列を取得して翻訳
+        const text = clipboard.readText();
+        translate(text);
     });
 }
 
@@ -39,21 +61,54 @@ const removeShortcutKey = () => {
     }
 }
 
+const autoSignin = (is_submit) => {
+    // オートサインイン
+    const email = preferences.value('cotoha.email');
+    let password = preferences.value('cotoha.password');
+    password = preferences.decrypt(password ? password : '');
+    setElementValue('#email', 'HTMLInputTextElement', email);
+    setElementValue('#password', 'HTMLInputTextElement', password);
+
+    if (is_submit && (email.length > 0) && (password.length > 0)) {
+        // サインイン
+        view.webContents.executeJavaScript('document.querySelector("button").click()');
+    }
+}
+
+const quit = () => {
+    // アプリ終了
+    app.quitting = true;
+    app.quit();
+}
+
 const createWindow = () => {
-    mainWindow = new BrowserWindow({width: 1200, height: 675, 'icon': __dirname + 'favicon.ico'});
+    mainWindow = new BrowserWindow({ width: 1200, height: 675, title: 'Conoha Translator Client', 'icon': __dirname + 'favicon.ico' });
     view = new BrowserView();
     mainWindow.setBrowserView(view);
-    const [width, height] = mainWindow.getContentSize();
-    view.setBounds({x: 0, y: 0, width: width, height: height});
-    //view.webContents.loadURL('https://translate.google.com/');
-    view.webContents.loadURL('https://www.linguee.jp/%E6%97%A5%E6%9C%AC%E8%AA%9E-%E8%8B%B1%E8%AA%9E/%E7%BF%BB%E8%A8%B3/%E3%82%A4%E3%83%B3%E3%83%95%E3%82%A9%E3%82%B7%E3%83%BC%E3%82%AF.html');
+    view.setAutoResize({ width: true, height: true });
+    if (process.env.NODE_ENV === "debug") {
+        mainWindow.openDevTools();
+    }
 
-    // ウィンドウのリサイズイベントを検知する
-    mainWindow.on('resize', () => {
-        // ウィンドウの現在のサイズを取得する
-        const [width, height] = mainWindow.getContentSize()
-        // BrowserViewのサイズと位置を変更する
-        view.setBounds({ x: 0, y: 0, width: width, height: height })
+    view.webContents.loadURL(`https://${preferences.value('cotoha.domain')}/register/signin.php`);
+    view.webContents.on('dom-ready', () => {
+        const [width, height] = mainWindow.getContentSize();
+        view.setBounds({ x: 0, y: 0, width: width, height: height });
+
+        if (view.webContents.getURL().indexOf("signin.php") >= 0) {
+            // オートサインイン
+            let is_submit = true;
+            if (trySignin) {
+                console.log("signin failed");
+                dialog.showErrorBox("Signin Failed", "Signin failed.");
+                is_submit = false;
+            }
+            trySignin = true;
+            autoSignin(is_submit);
+        }
+        else {
+            trySignin = false;
+        }
     });
 
     // クリップボードの変化を検知したら一定時間ショートカットキーを有効化
@@ -67,10 +122,7 @@ const createWindow = () => {
     // タスクトレイのメニューを設定する
     const contextMenu = Menu.buildFromTemplate([
         { label: "Show", click: () => mainWindow.show() },
-        { label: "Quit", click: () => {
-            app.quitting = true;
-            app.quit();
-        }},
+        { label: "Quit", click: () => quit() },
     ]);
     tray.setToolTip("CotohaTranslator");
     tray.setContextMenu(contextMenu);
@@ -84,6 +136,33 @@ const createWindow = () => {
             mainWindow.hide();
         }
     });
+
+    // メニュー設定
+    const menuTemplate = [{
+        label: 'File',
+        submenu: [
+            {
+                label: 'Reflash',
+                accelerator: 'F5',
+                click: () => {
+                    trySignin = false;
+                    view.webContents.reload();
+                },
+            },
+            {
+                label: 'Settings',
+                click: () => preferences.show(),
+            },
+            { type: 'separator' },
+            {
+                label: 'Quit',
+                accelerator: 'CommandOrControl+Q',
+                click: () => quit(),
+            },
+        ],
+    }];
+    const menu = Menu.buildFromTemplate(menuTemplate);
+    Menu.setApplicationMenu(menu);
 }
 
 // 二重起動防止
@@ -92,7 +171,7 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
     app.quit();
 } else {
-    app.on('second-instance', () => {})
+    app.on('second-instance', () => { })
 }
 
 app.on('ready', createWindow);
@@ -101,7 +180,7 @@ app.on('window-all-closed', () => {
     clipboardListener.stopListening();
     globalShortcut.unregisterAll();
     if (process.platform !== 'darwin') {
-        app.quit();
+        quit();
     }
 });
 
