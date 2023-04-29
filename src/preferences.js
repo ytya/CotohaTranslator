@@ -1,11 +1,11 @@
-const { electron, Menu, app} = require('electron');
+const { electron, Menu, app } = require('electron');
 const ElectronPreferences = require('electron-preferences');
 const path = require('path');
 
 const preferences = new ElectronPreferences({
 	// Override default preference BrowserWindow values
-    browserWindowOverrides: { /* ... */ },
-	
+	browserWindowOverrides: { /* ... */ },
+
 	// Provide a custom CSS file, relative to your appPath.
 	// css: 'preference-styles.css',
 
@@ -14,12 +14,13 @@ const preferences = new ElectronPreferences({
 
 	// Preference default values
 	defaults: {
-        cotoha: {
-            domain: 'cotoha-ipf.miraitranslator.com',
-            email: '',
-            password: ''
-        }
-    },
+		cotoha: {
+			domain: '',
+			email: '',
+			password: '',
+			shortcut_key: 'C'
+		},
+	},
 
 	// Preference sections visible to the UI
 	sections: [
@@ -30,7 +31,7 @@ const preferences = new ElectronPreferences({
 			form: {
 				groups: [
 					{
-						'label': 'Cotoha', // optional
+						'label': 'Cotoha',
 						'fields': [
 							{
 								label: 'Domain',
@@ -38,13 +39,13 @@ const preferences = new ElectronPreferences({
 								type: 'text',
 								help: 'COTOHA domain (~.miraitranslator.com)'
 							},
-                            {
+							{
 								label: 'Mail',
 								key: 'email',
 								type: 'text',
 								help: 'account mail address'
 							},
-                            {
+							{
 								label: 'Password',
 								key: 'password',
 								type: 'secret',
@@ -52,6 +53,17 @@ const preferences = new ElectronPreferences({
 							},
 						]
 					},
+					{
+						'label': 'App',
+						'fields': [
+							{
+								label: 'Shortcut Key',
+								key: 'shortcut_key',
+								type: 'text',
+								help: 'Translate shortcut key. (Ctrl+C, {value})'
+							}
+						]
+					}
 				]
 			}
 		},
@@ -61,7 +73,7 @@ const preferences = new ElectronPreferences({
 
 // Subscribing to preference changes.
 preferences.on('save', (preferences) => {
-  console.log(`Preferences were saved.`);
+	console.log(`Preferences were saved.`);
 });
 
 
